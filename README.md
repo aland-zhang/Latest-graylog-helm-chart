@@ -1,2 +1,2 @@
-# Latest-gaylog-helm-chart
-Latest gaylog helm chart for kubernetes 
+# Graylog-Kubernetes
+Graylog kubernetes cluster with mongodb elastic search using helm chart

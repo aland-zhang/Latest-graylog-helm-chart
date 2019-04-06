@@ -1,0 +1,71 @@
+{{- $elasticsearchServiceName := include "elasticsearch.fullname" . -}}
+apiVersion: apps/v1beta1
+kind: StatefulSet
+metadata:
+  name: {{ template "elasticsearch.fullname" . }}
+  metadata:
+    labels:
+      app: {{ template "graylog.name" . }}
+      chart: {{ template "graylog.chart" . }}
+      component: elasticsearch
+      release: {{ .Release.Name }}
+      heritage: {{ .Release.Service }}
+spec:
+  serviceName: {{ template "elasticsearch.fullname" . }}
+  replicas: 3
+  podManagementPolicy: Parallel
+  template:
+    metadata:
+      labels:
+        app: {{ template "graylog.name" . }}
+        component: elasticsearch
+        release: {{ .Release.Name }}
+    spec:
+      terminationGracePeriodSeconds: 10
+      initContainers:
+      - name: set-dir-owner
+        image: busybox:1.29.2
+        command: ['sh', '-c', 'chown -R 1000:1000 /usr/share/elasticsearch/data']
+        volumeMounts:
+        - name: elasticsearch-persistent-storage
+          mountPath: /usr/share/elasticsearch/data
+      containers:
+        - name: elasticsearch
+          image: elasticsearch:6.5.0
+          securityContext:
+            runAsUser: 1000
+          command:
+          - elasticsearch
+          - "-Ediscovery.zen.ping.unicast.hosts={{ $elasticsearchServiceName }}-0.{{ $elasticsearchServiceName }},{{ $elasticsearchServiceName }}-1.{{ $elasticsearchServiceName }},{{ $elasticsearchServiceName }}-2.{{ $elasticsearchServiceName }}"
+          - "-Ediscovery.zen.minimum_master_nodes=2"
+          - "-Ediscovery.zen.ping.unicast.hosts.resolve_timeout=90s"
+          - "-Ediscovery.zen.ping_timeout=90s"
+          - "-Ecluster.name=graylog"
+          env:
+          - name: discovery.zen.ping.unicast.hosts
+            value: {{ $elasticsearchServiceName }}-0.{{ $elasticsearchServiceName }},{{ $elasticsearchServiceName }}-1.{{ $elasticsearchServiceName }},{{ $elasticsearchServiceName }}-2.{{ $elasticsearchServiceName }}
+          - name: cluster.name
+            value: "graylog"
+          - name: ES_JAVA_OPTS
+            value: "-Xms512m -Xmx512m"
+          - name: bootstrap.memory_lock
+            value: "true"
+          ports:
+          - containerPort: 9200
+            name: http
+          - containerPort: 9300
+            name: transport
+          volumeMounts:
+          - name: elasticsearch-persistent-storage
+            mountPath: /usr/share/elasticsearch/data
+          resources:
+{{ toYaml .Values.elasticsearch.containers.resources | indent 12 }}
+  volumeClaimTemplates:
+  - metadata:
+      name: elasticsearch-persistent-storage
+      annotations:
+        volume.beta.kubernetes.io/storage-class: "standard"
+    spec:
+      accessModes: [ "ReadWriteOnce" ]
+      resources:
+{{ toYaml .Values.elasticsearch.volumeClaimTemplates.resources | indent 8 }}
